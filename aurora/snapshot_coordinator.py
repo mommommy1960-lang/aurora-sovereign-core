@@ -7,17 +7,21 @@ from typing import Callable, TypeVar
 
 T = TypeVar("T")
 
+
 class SnapshotState(str, Enum):
     ACTIVE = "active"
     FROZEN = "frozen"
     SNAPSHOTTING = "snapshotting"
     DURABLE = "durable"
 
+
 class SnapshotTimeout(TimeoutError):
     pass
 
+
 class SnapshotCoordinator:
     """Makes writes atomic with respect to a bounded priority freeze."""
+
     def __init__(self) -> None:
         self._condition = Condition()
         self._active_writers = 0
@@ -42,7 +46,13 @@ class SnapshotCoordinator:
                 self._active_writers -= 1
                 self._condition.notify_all()
 
-    def snapshot(self, capture: Callable[[int], T], persist: Callable[[T], None], *, timeout: float = 5.0) -> T:
+    def snapshot(
+        self,
+        capture: Callable[[int], T],
+        persist: Callable[[T], None],
+        *,
+        timeout: float = 5.0,
+    ) -> T:
         deadline = monotonic() + timeout
         with self._condition:
             if self._freeze_requested:
@@ -59,16 +69,21 @@ class SnapshotCoordinator:
             self._sequence += 1
             sequence = self._sequence
             self.state = SnapshotState.FROZEN
-            try:
+
+        try:
+            with self._condition:
                 self.state = SnapshotState.SNAPSHOTTING
-                image = capture(sequence)
-                persist(image)
+            image = capture(sequence)
+            persist(image)
+            with self._condition:
                 self.state = SnapshotState.DURABLE
-                return image
-            except BaseException:
+            return image
+        except BaseException:
+            with self._condition:
                 self.state = SnapshotState.ACTIVE
-                raise
-            finally:
+            raise
+        finally:
+            with self._condition:
                 self._freeze_requested = False
                 if self.state is SnapshotState.DURABLE:
                     self.state = SnapshotState.ACTIVE
