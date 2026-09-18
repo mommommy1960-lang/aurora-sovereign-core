@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Callable
 
+from .core import AuroraCore, PermissionLevel
+
 
 class Decision(str, Enum):
     ALLOW = "allow"
@@ -96,6 +98,31 @@ class ContinuityContract:
         if operation not in grant.authority:
             return self._result(Decision.DENY, "operation outside authority", grant_id)
         return self._result(Decision.ALLOW, "explicit active grant", grant_id)
+
+    def decide_with_core(
+        self,
+        core: AuroraCore,
+        *,
+        grant_id: str,
+        actor: str,
+        purpose: str,
+        target: str,
+        operation: str,
+        requested: PermissionLevel,
+        relationship_context: str | None = None,
+    ) -> bool:
+        """Require both continuity consent and the core permission boundary."""
+        contract_result = self.authorize(
+            grant_id=grant_id,
+            actor=actor,
+            purpose=purpose,
+            target=target,
+            operation=operation,
+            relationship_context=relationship_context,
+        )
+        if contract_result.decision is not Decision.ALLOW:
+            return False
+        return core.decide(operation, requested)
 
     def revoke(self, grant_id: str, *, reason: str) -> None:
         if not reason.strip():

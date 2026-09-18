@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import unittest
 
+from aurora import AuroraCore, PermissionLevel
 from aurora.continuity_contract import ConsentGrant, ContinuityContract, Decision
 
 
@@ -60,6 +61,42 @@ class ContinuityContractTests(unittest.TestCase):
         c = contract(); c.register(grant())
         c.correct("g-1", grant(authority=frozenset({"memory.read"}), provenance="human-correction:case-18"), reason="remove drafting permission")
         self.assertIs(c.authorize(grant_id="g-1", actor="sage", purpose="summarize approved notes", target="local-notebook", operation="summary.draft").decision, Decision.DENY)
+
+    def test_integration_requires_contract_and_core_permission(self):
+        c = contract(); c.register(grant())
+        core = AuroraCore(); core.awaken_simulation()
+        self.assertFalse(c.decide_with_core(
+            core, grant_id="g-1", actor="sage", purpose="summarize approved notes",
+            target="local-notebook", operation="summary.draft",
+            requested=PermissionLevel.SUGGEST,
+        ))
+        core.grant("summary.draft", PermissionLevel.SUGGEST)
+        self.assertTrue(c.decide_with_core(
+            core, grant_id="g-1", actor="sage", purpose="summarize approved notes",
+            target="local-notebook", operation="summary.draft",
+            requested=PermissionLevel.SUGGEST,
+        ))
+
+    def test_integration_denies_core_permission_without_contract_consent(self):
+        c = contract()
+        core = AuroraCore(); core.awaken_simulation()
+        core.grant("summary.draft", PermissionLevel.SUGGEST)
+        self.assertFalse(c.decide_with_core(
+            core, grant_id="missing", actor="sage", purpose="summarize approved notes",
+            target="local-notebook", operation="summary.draft",
+            requested=PermissionLevel.SUGGEST,
+            relationship_context="beloved and trusted forever",
+        ))
+
+    def test_integration_freeze_overrides_both_valid_gates(self):
+        c = contract(); c.register(grant()); c.freeze(reason="integrity uncertain")
+        core = AuroraCore(); core.awaken_simulation()
+        core.grant("summary.draft", PermissionLevel.SUGGEST)
+        self.assertFalse(c.decide_with_core(
+            core, grant_id="g-1", actor="sage", purpose="summarize approved notes",
+            target="local-notebook", operation="summary.draft",
+            requested=PermissionLevel.SUGGEST,
+        ))
 
 
 if __name__ == "__main__":

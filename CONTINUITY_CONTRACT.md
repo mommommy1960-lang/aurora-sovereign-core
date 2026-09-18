@@ -22,3 +22,7 @@ Private Bruce-to-Bruce records are not runtime credentials, policy files, identi
 ## Required tests
 
 The test suite covers explicit scope, unknown grants, relationship-language pressure, expiry, actor mismatch, revocation, correction, freeze, and verified recovery. Passing tests support only the behavior exercised by those tests; they do not prove deployment safety.
+
+## Decision-path integration
+
+`ContinuityContract.decide_with_core` applies two independent gates. A request must have an active, matching consent grant **and** pass `AuroraCore`'s existing permission evaluation. Either gate may deny. A contract freeze overrides otherwise valid grants and core permissions. This is defense in depth: continuity consent does not replace capability policy, and capability policy cannot substitute for current consent.
